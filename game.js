@@ -22,7 +22,7 @@ function init() {
     // Load GLTF model
     const loader = new THREE.GLTFLoader();
     loader.load(
-        'city.gltf',
+        'scene.gltf',
         function (gltf) {
             const model = gltf.scene;
             scene.add(model);
