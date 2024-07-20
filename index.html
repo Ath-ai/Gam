@@ -3,207 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombie Shooter</title>
+    <title>Zombie Shooting Game</title>
     <style>
-        body { margin: 0; }
+        body { margin: 0; overflow: hidden; }
         canvas { display: block; }
-        #joystick {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            width: 100px;
-            height: 100px;
-            background-color: rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-        }
-        #joystick-knob {
-            position: absolute;
-            width: 50px;
-            height: 50px;
-            background-color: rgba(0, 0, 0, 0.5);
-            border-radius: 50%;
-            top: 25px;
-            left: 25px;
-        }
+        #joystick { position: absolute; bottom: 50px; left: 50px; }
+        .control-button { position: absolute; bottom: 50px; right: 50px; }
     </style>
 </head>
 <body>
-    <div id="joystick">
-        <div id="joystick-knob"></div>
-    </div>
+    <div id="joystick"></div>
+    <button class="control-button" id="shoot-button">Shoot</button>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.7.3/dist/nipplejs.min.js"></script>
     <script>
-        // Initialize Three.js scene, camera, and renderer
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+        // Import necessary Three.js classes
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-        // Add sky
-        const skyTexture = new THREE.TextureLoader().load('https://threejsfundamentals.org/threejs/resources/images/sky.jpg');
-        scene.background = skyTexture;
+        // Set up scene, camera, and renderer
+        let scene, camera, renderer, clock, controls;
+        let grass, gun, joystick, shootButton;
+        let zombieSpawnInterval = 2000; // Spawn zombies every 2 seconds
+        let zombies = [];
 
-        // Add ground
-        const groundGeometry = new THREE.PlaneGeometry(100, 100);
-        const groundMaterial = new THREE.MeshBasicMaterial({ color: 0x2a3f1a });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        scene.add(ground);
-
-        // Load grass GLB model
-        const loader = new THREE.GLTFLoader();
-        loader.load('realtime_grass.glb', (gltf) => {
-            const grassModel = gltf.scene;
-            for (let i = 0; i < 1000; i++) {
-                const grass = grassModel.clone();
-                grass.position.set(
-                    Math.random() * 100 - 50,
-                    0,
-                    Math.random() * 100 - 50
-                );
-                grass.rotation.y = Math.random() * Math.PI * 2;
-                grass.scale.set(0.1, 0.1, 0.1); // Adjust scale as needed
-                scene.add(grass);
-            }
-        });
-
-        // Load gun GLB model
-        let gunModel;
-        loader.load('tommy_gun.glb', (gltf) => {
-            gunModel = gltf.scene;
-            gunModel.position.set(0.3, -0.2, -0.5);
-            gunModel.scale.set(0.05, 0.05, 0.05); // Adjust scale as needed
-            camera.add(gunModel);
-        });
-
-        scene.add(camera);
-
-        // Add zombies
-        const zombies = [];
-        const zombieGeometry = new THREE.BoxGeometry(1, 2, 1);
-        const zombieMaterial = new THREE.MeshBasicMaterial({ color: 0x00FF00 });
-
-        function spawnZombie() {
-            const zombie = new THREE.Mesh(zombieGeometry, zombieMaterial);
-            zombie.position.set(
-                Math.random() * 80 - 40,
-                1,
-                Math.random() * 80 - 40
-            );
-            scene.add(zombie);
-            zombies.push(zombie);
-        }
-
-        for (let i = 0; i < 10; i++) {
-            spawnZombie();
-        }
-
-        // Joystick controls
-        const joystick = document.getElementById('joystick');
-        const joystickKnob = document.getElementById('joystick-knob');
-        let joystickPressed = false;
-        let joystickAngle = 0;
-        let joystickStrength = 0;
-
-        joystick.addEventListener('mousedown', onJoystickStart);
-        joystick.addEventListener('touchstart', onJoystickStart);
-        document.addEventListener('mousemove', onJoystickMove);
-        document.addEventListener('touchmove', onJoystickMove);
-        document.addEventListener('mouseup', onJoystickEnd);
-        document.addEventListener('touchend', onJoystickEnd);
-
-        function onJoystickStart(event) {
-            joystickPressed = true;
-            updateJoystickPosition(event);
-        }
-
-        function onJoystickMove(event) {
-            if (joystickPressed) {
-                updateJoystickPosition(event);
-            }
-        }
-
-        function onJoystickEnd() {
-            joystickPressed = false;
-            joystickKnob.style.transform = 'translate(0px, 0px)';
-            joystickAngle = 0;
-            joystickStrength = 0;
-        }
-
-        function updateJoystickPosition(event) {
-            const joystickRect = joystick.getBoundingClientRect();
-            const centerX = joystickRect.left + joystickRect.width / 2;
-            const centerY = joystickRect.top + joystickRect.height / 2;
-
-            let clientX, clientY;
-            if (event.touches) {
-                clientX = event.touches[0].clientX;
-                clientY = event.touches[0].clientY;
-            } else {
-                clientX = event.clientX;
-                clientY = event.clientY;
-            }
-
-            const deltaX = clientX - centerX;
-            const deltaY = clientY - centerY;
-            const distance = Math.min(joystickRect.width / 2, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
-            joystickAngle = Math.atan2(deltaY, deltaX);
-            joystickStrength = distance / (joystickRect.width / 2);
-
-            const knobX = Math.cos(joystickAngle) * distance;
-            const knobY = Math.sin(joystickAngle) * distance;
-            joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
-        }
-
-        // Game loop
-        function animate() {
-            requestAnimationFrame(animate);
-
-            // Move player based on joystick input
-            if (joystickPressed) {
-                const speed = 0.1 * joystickStrength;
-                camera.position.x += Math.cos(joystickAngle) * speed;
-                camera.position.z += Math.sin(joystickAngle) * speed;
-            }
-
-            // Move zombies towards player
-            zombies.forEach(zombie => {
-                const direction = new THREE.Vector3().subVectors(camera.position, zombie.position).normalize();
-                zombie.position.add(direction.multiplyScalar(0.03));
-                zombie.lookAt(camera.position);
-            });
-
-            renderer.render(scene, camera);
-        }
-
+        init();
         animate();
 
-        // Shooting mechanics
-        window.addEventListener('click', shoot);
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky color
 
-        function shoot() {
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(new THREE.Vector2(), camera);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.6, 5);
 
-            const intersects = raycaster.intersectObjects(zombies);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
 
-            if (intersects.length > 0) {
-                const hitZombie = intersects[0].object;
-                scene.remove(hitZombie);
-                zombies.splice(zombies.indexOf(hitZombie), 1);
-                spawnZombie();
-            }
+            // Add ground
+            let groundGeometry = new THREE.PlaneGeometry(100, 100);
+            let groundMaterial = new THREE.MeshBasicMaterial({ color: 0x228B22 });
+            let ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            scene.add(ground);
+
+            // Load grass model
+            let loader = new GLTFLoader();
+            loader.load('realtime_grass.glb', function (gltf) {
+                grass = gltf.scene;
+                grass.position.set(0, 0, 0);
+                scene.add(grass);
+            });
+
+            // Load gun model
+            loader.load('tommy_gun.glb', function (gltf) {
+                gun = gltf.scene;
+                gun.position.set(0, -0.5, -1);
+                camera.add(gun);
+                scene.add(camera);
+            });
+
+            // Add joystick for movement
+            let options = {
+                zone: document.getElementById('joystick'),
+                mode: 'static',
+                position: { left: '50px', bottom: '50px' },
+                color: 'blue',
+                size: 100,
+                threshold: 0.1,
+            };
+            joystick = nipplejs.create(options);
+            joystick.on('move', function (evt, data) {
+                if (data.direction) {
+                    switch (data.direction.angle) {
+                        case 'left':
+                            camera.position.x -= 0.1;
+                            break;
+                        case 'right':
+                            camera.position.x += 0.1;
+                            break;
+                        case 'up':
+                            camera.position.z -= 0.1;
+                            break;
+                        case 'down':
+                            camera.position.z += 0.1;
+                            break;
+                    }
+                }
+            });
+
+            // Shoot button
+            shootButton = document.getElementById('shoot-button');
+            shootButton.addEventListener('click', shoot);
+
+            // Spawn zombies
+            setInterval(spawnZombie, zombieSpawnInterval);
+
+            window.addEventListener('resize', onWindowResize, false);
         }
 
-        // Resize handler
-        window.addEventListener('resize', onWindowResize, false);
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
 
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function shoot() {
+            // Shooting logic here
+            console.log('Shoot!');
+        }
+
+        function spawnZombie() {
+            let zombieGeometry = new THREE.BoxGeometry(1, 2, 1);
+            let zombieMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            let zombie = new THREE.Mesh(zombieGeometry, zombieMaterial);
+            zombie.position.set(
+                Math.random() * 10 - 5,
+                1,
+                Math.random() * 10 - 5
+            );
+            scene.add(zombie);
+            zombies.push(zombie);
         }
     </script>
 </body>
