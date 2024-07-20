@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Zombie Shooter with Sky, Player, and Gun</title>
+    <title>3D Zombie Shooter with Adjusted Camera Height</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <style>
@@ -56,6 +56,9 @@
         const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
+
+        // Adjust camera position
+        camera.position.y = 1.7; // Set camera height to approximately 1.7 meters (average human height)
 
         // Create sky
         const skyGeometry = new THREE.SphereGeometry(500, 32, 32);
