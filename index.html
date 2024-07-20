@@ -94,7 +94,7 @@
         // Load GLB ground model
         const loader = new THREE.GLTFLoader();
         loader.load(
-            '/api/placeholder/glb', // Replace with actual ground GLB file path
+            'realtime_grass.glb', // Replace with actual ground GLB file path
             (gltf) => {
                 const ground = gltf.scene;
                 ground.scale.set(10, 10, 10); // Adjust scale as needed
@@ -112,7 +112,7 @@
         // Load GLB gun model
         let gunModel;
         loader.load(
-            '/api/placeholder/glb', // Replace with actual gun GLB file path
+            'tommy_gun.glb', // Replace with actual gun GLB file path
             (gltf) => {
                 gunModel = gltf.scene;
                 gunModel.scale.set(0.1, 0.1, 0.1); // Adjust scale as needed
