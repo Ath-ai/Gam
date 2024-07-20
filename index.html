@@ -3,26 +3,196 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GLTF City Model Viewer</title>
+    <title>3D Zombie Shooter with GLB Ground</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
+        body { margin: 0; }
+        canvas { display: block; }
+        #joystick {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 100px;
+            height: 100px;
+            background: rgba(255,255,255,0.5);
+            border-radius: 50%;
         }
-        #game-container {
-            width: 100%;
-            height: 100vh;
-            overflow: hidden;
-            position: relative;
+        #stick {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            width: 50px;
+            height: 50px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 50%;
         }
     </style>
 </head>
 <body>
-    <div id="game-container"></div>
+    <div id="joystick">
+        <div id="stick"></div>
+    </div>
+    <script>
+        // Set up scene, camera, and renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
-    <script src="game.js"></script>
+        // Load GLB ground model
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            'scane.gltf', // Replace with actual GLB file path
+            (gltf) => {
+                const ground = gltf.scene;
+                ground.scale.set(10, 10, 10); // Adjust scale as needed
+                ground.position.y = -1; // Adjust position as needed
+                scene.add(ground);
+            },
+            (xhr) => {
+                console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+            },
+            (error) => {
+                console.error('An error happened', error);
+            }
+        );
+
+        // Add ambient light
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        // Add directional light
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight.position.set(0, 1, 0);
+        scene.add(directionalLight);
+
+        // Player movement
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+
+        const onKeyDown = (event) => {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = true;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = true;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = true;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = true;
+                    break;
+            }
+        };
+
+        const onKeyUp = (event) => {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = false;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = false;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = false;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = false;
+                    break;
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        // Joystick controls
+        const joystick = document.getElementById('joystick');
+        const stick = document.getElementById('stick');
+        let joystickPressed = false;
+        let joystickAngle = 0;
+
+        const onJoystickStart = (event) => {
+            joystickPressed = true;
+            updateJoystickPosition(event);
+        };
+
+        const onJoystickMove = (event) => {
+            if (joystickPressed) {
+                updateJoystickPosition(event);
+            }
+        };
+
+        const onJoystickEnd = () => {
+            joystickPressed = false;
+            stick.style.transform = 'translate(0px, 0px)';
+            moveForward = moveBackward = moveLeft = moveRight = false;
+        };
+
+        const updateJoystickPosition = (event) => {
+            const joystickRect = joystick.getBoundingClientRect();
+            const centerX = joystickRect.left + joystickRect.width / 2;
+            const centerY = joystickRect.top + joystickRect.height / 2;
+            const touchX = event.touches ? event.touches[0].clientX : event.clientX;
+            const touchY = event.touches ? event.touches[0].clientY : event.clientY;
+
+            const deltaX = touchX - centerX;
+            const deltaY = touchY - centerY;
+            const distance = Math.min(joystickRect.width / 4, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+            joystickAngle = Math.atan2(deltaY, deltaX);
+
+            const stickX = distance * Math.cos(joystickAngle);
+            const stickY = distance * Math.sin(joystickAngle);
+
+            stick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+
+            moveForward = deltaY < -10;
+            moveBackward = deltaY > 10;
+            moveLeft = deltaX < -10;
+            moveRight = deltaX > 10;
+        };
+
+        joystick.addEventListener('mousedown', onJoystickStart);
+        joystick.addEventListener('touchstart', onJoystickStart);
+        document.addEventListener('mousemove', onJoystickMove);
+        document.addEventListener('touchmove', onJoystickMove);
+        document.addEventListener('mouseup', onJoystickEnd);
+        document.addEventListener('touchend', onJoystickEnd);
+
+        // Game loop
+        const animate = () => {
+            requestAnimationFrame(animate);
+
+            const speed = 0.1;
+            if (moveForward) camera.position.z -= speed;
+            if (moveBackward) camera.position.z += speed;
+            if (moveLeft) camera.position.x -= speed;
+            if (moveRight) camera.position.x += speed;
+
+            renderer.render(scene, camera);
+        };
+
+        animate();
+
+        // Handle window resizing
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
