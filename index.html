@@ -44,7 +44,7 @@
         // Load GLB ground model
         const loader = new THREE.GLTFLoader();
         loader.load(
-            'scane.gltf', // Replace with actual GLB file path
+            'realtime_grass.glb', // Replace with actual GLB file path
             (gltf) => {
                 const ground = gltf.scene;
                 ground.scale.set(10, 10, 10); // Adjust scale as needed
