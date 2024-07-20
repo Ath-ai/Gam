@@ -3,134 +3,395 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombie Shooting Game</title>
+    <title>Enhanced Post-Apocalyptic FPS: World War Z Aftermath</title>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
-        #joystick { position: absolute; bottom: 50px; left: 50px; }
-        .control-button { position: absolute; bottom: 50px; right: 50px; }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 0, 0, 0.8);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        #joystick-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 100px;
+            height: 100px;
+        }
+        #shoot-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            background-color: rgba(255, 0, 0, 0.5);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: white;
+            user-select: none;
+        }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #ff0000;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+        }
     </style>
 </head>
 <body>
-    <div id="joystick"></div>
-    <button class="control-button" id="shoot-button">Shoot</button>
+    <div id="crosshair"></div>
+    <div id="joystick-container"></div>
+    <div id="shoot-button">FIRE</div>
+    <div id="hud">
+        <div id="ammo">Ammo: 30 / 90</div>
+        <div id="health">Health: 100</div>
+    </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.7.3/dist/nipplejs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.7.3/nipplejs.min.js"></script>
     <script>
-        // Import necessary Three.js classes
-        import * as THREE from 'three';
-        import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-
-        // Set up scene, camera, and renderer
-        let scene, camera, renderer, clock, controls;
-        let grass, gun, joystick, shootButton;
-        let zombieSpawnInterval = 2000; // Spawn zombies every 2 seconds
+        let scene, camera, renderer, gun, torchLight;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        let raycaster;
+        let simplex = new SimplexNoise();
+        let bullets = [];
+        const tempVector = new THREE.Vector3();
+        let gunSound, walkingSound, zombieSound, reloadSound;
+        let ammo = 30;
+        let totalAmmo = 90;
+        let health = 100;
         let zombies = [];
-
-        init();
-        animate();
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // Sky color
-
+            scene.background = new THREE.Color(0x111111);
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 1.6, 5);
-
-            renderer = new THREE.WebGLRenderer();
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.2;
             document.body.appendChild(renderer.domElement);
 
-            // Add ground
-            let groundGeometry = new THREE.PlaneGeometry(100, 100);
-            let groundMaterial = new THREE.MeshBasicMaterial({ color: 0x228B22 });
-            let ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+            scene.add(ambientLight);
+
+            const moonLight = new THREE.DirectionalLight(0x3070A0, 0.3);
+            moonLight.position.set(50, 100, 50);
+            moonLight.castShadow = true;
+            moonLight.shadow.mapSize.width = 4096;
+            moonLight.shadow.mapSize.height = 4096;
+            scene.add(moonLight);
+
+            scene.fog = new THREE.FogExp2(0x111111, 0.015);
+
+            const { gunGroup, gunTorchLight } = createGun();
+            gun = gunGroup;
+            torchLight = gunTorchLight;
+            camera.add(gun);
+            scene.add(torchLight);
+            scene.add(camera);
+
+            createEnvironment();
+            createGrass();
+
+            raycaster = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 10);
+
+            setupControls();
+            setupJoystick();
+            setupShootButton();
+
+            gunSound = loadSound('https://github.com/Ath-ai/Athz/raw/main/Gun_shootin.mp3');
+            walkingSound = loadSound('https://github.com/Ath-ai/Athz/raw/main/Running_forest.mp3');
+            zombieSound = loadSound('https://github.com/Ath-ai/Athz/raw/main/Zombie_sound.mp3');
+            reloadSound = loadSound('https://github.com/Ath-ai/Athz/raw/main/Reload_sound.mp3');
+
+            createZombies(20);
+        }
+
+        function createGun() {
+            const gunGroup = new THREE.Group();
+            const bodyGeometry = new THREE.BoxGeometry(0.1, 0.15, 0.4);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.7 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            gunGroup.add(body);
+
+            const barrelGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 16);
+            const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.8 });
+            const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+            barrel.rotation.z = Math.PI / 2;
+            barrel.position.set(0, 0.05, 0.2);
+            gunGroup.add(barrel);
+
+            const handleGeometry = new THREE.BoxGeometry(0.05, 0.15, 0.1);
+            const handleMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8, metalness: 0.2 });
+            const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+            handle.position.set(0, -0.15, 0);
+            gunGroup.add(handle);
+
+            const torchGeometry = new THREE.CylinderGeometry(0.02, 0.025, 0.1, 16);
+            const torchMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.7, metalness: 0.3 });
+            const torch = new THREE.Mesh(torchGeometry, torchMaterial);
+            torch.rotation.x = Math.PI / 2;
+            torch.position.set(0, 0.08, 0.2);
+            gunGroup.add(torch);
+
+            const torchLight = new THREE.SpotLight(0xFFAA00, 2, 50, Math.PI / 6, 0.5, 1);
+            torchLight.position.set(0, 0.08, 0.25);
+            gunGroup.add(torchLight);
+            gunGroup.add(torchLight.target);
+            torchLight.target.position.set(0, 0.08, 1);
+
+            gunGroup.position.set(0.2, -0.2, -0.3);
+            return { gunGroup, gunTorchLight: torchLight };
+        }
+
+        function createEnvironment() {
+            const textureLoader = new THREE.TextureLoader();
+            const groundTexture = textureLoader.load('https://i.postimg.cc/brdgzsZF/grasslight-big.jpg');
+            groundTexture.wrapS = THREE.RepeatWrapping;
+            groundTexture.wrapT = THREE.RepeatWrapping;
+            groundTexture.repeat.set(100, 100);
+
+            const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+            const groundMaterial = new THREE.MeshStandardMaterial({ map: groundTexture, roughness: 0.8, metalness: 0.2 });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
             ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
             scene.add(ground);
 
-            // Load grass model
-            let loader = new GLTFLoader();
-            loader.load('realtime_grass.glb', function (gltf) {
-                grass = gltf.scene;
-                grass.position.set(0, 0, 0);
-                scene.add(grass);
-            });
+            const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x1a3300, roughness: 0.9 });
+            for (let i = 0; i < 100; i++) {
+                const treeGroup = new THREE.Group();
+                const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.5, 5, 8);
+                const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.y = 2.5;
+                treeGroup.add(trunk);
 
-            // Load gun model
-            loader.load('tommy_gun.glb', function (gltf) {
-                gun = gltf.scene;
-                gun.position.set(0, -0.5, -1);
-                camera.add(gun);
-                scene.add(camera);
-            });
+                for (let j = 0; j < 3; j++) {
+                    const leavesGeometry = new THREE.ConeGeometry(2.5 - j, 4, 8);
+                    const leaves = new THREE.Mesh(leavesGeometry, treeMaterial);
+                    leaves.position.y = 6 - j * 2.5;
+                    treeGroup.add(leaves);
+                }
 
-            // Add joystick for movement
-            let options = {
-                zone: document.getElementById('joystick'),
-                mode: 'static',
-                position: { left: '50px', bottom: '50px' },
-                color: 'blue',
-                size: 100,
-                threshold: 0.1,
-            };
-            joystick = nipplejs.create(options);
-            joystick.on('move', function (evt, data) {
-                if (data.direction) {
-                    switch (data.direction.angle) {
-                        case 'left':
-                            camera.position.x -= 0.1;
-                            break;
-                        case 'right':
-                            camera.position.x += 0.1;
-                            break;
-                        case 'up':
-                            camera.position.z -= 0.1;
-                            break;
-                        case 'down':
-                            camera.position.z += 0.1;
-                            break;
+                treeGroup.position.set(Math.random() * 1000 - 500, 0, Math.random() * 1000 - 500);
+                treeGroup.castShadow = true;
+                treeGroup.receiveShadow = true;
+                scene.add(treeGroup);
+            }
+        }
+
+        function createGrass() {
+            const loader = new THREE.GLTFLoader();
+            loader.load('realtime_grass.glb', (gltf) => {
+                const grassModel = gltf.scene;
+                grassModel.scale.set(0.1, 0.1, 0.1);
+                grassModel.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
                     }
+                });
+                for (let i = 0; i < 1000; i++) {
+                    const grassClone = grassModel.clone();
+                    grassClone.position.set(Math.random() * 1000 - 500, 0, Math.random() * 1000 - 500);
+                    scene.add(grassClone);
+                }
+            }, undefined, (error) => {
+                console.error('An error occurred while loading the grass model:', error);
+            });
+        }
+
+        function setupControls() {
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+        }
+
+        function setupJoystick() {
+            const joystickContainer = document.getElementById('joystick-container');
+            const joystick = nipplejs.create({
+                zone: joystickContainer,
+                mode: 'static',
+                position: { left: '50%', top: '50%' },
+                color: 'red'
+            });
+
+            joystick.on('move', (event, data) => {
+                const forward = data.vector.y;
+                const turn = data.vector.x;
+                moveForward = forward < 0;
+                moveBackward = forward > 0;
+                moveLeft = turn < 0;
+                moveRight = turn > 0;
+            });
+
+            joystick.on('end', () => {
+                moveForward = false;
+                moveBackward = false;
+                moveLeft = false;
+                moveRight = false;
+            });
+        }
+
+        function setupShootButton() {
+            const shootButton = document.getElementById('shoot-button');
+            shootButton.addEventListener('click', () => {
+                if (ammo > 0) {
+                    shoot();
+                    ammo--;
+                    document.getElementById('ammo').textContent = `Ammo: ${ammo} / ${totalAmmo}`;
+                } else {
+                    reloadSound.play();
                 }
             });
+        }
 
-            // Shoot button
-            shootButton = document.getElementById('shoot-button');
-            shootButton.addEventListener('click', shoot);
+        function loadSound(url) {
+            const listener = new THREE.AudioListener();
+            camera.add(listener);
+            const sound = new THREE.Audio(listener);
+            const audioLoader = new THREE.AudioLoader();
+            audioLoader.load(url, (buffer) => {
+                sound.setBuffer(buffer);
+                sound.setLoop(false);
+                sound.setVolume(0.5);
+            });
+            return sound;
+        }
 
-            // Spawn zombies
-            setInterval(spawnZombie, zombieSpawnInterval);
+        function shoot() {
+            const bulletGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+            const bulletMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            bullet.position.copy(camera.position);
+            bullet.quaternion.copy(camera.quaternion);
+            bullet.castShadow = true;
+            bullet.receiveShadow = true;
+            scene.add(bullet);
+            bullets.push(bullet);
+            gunSound.play();
+        }
 
-            window.addEventListener('resize', onWindowResize, false);
+        function createZombies(numZombies) {
+            const loader = new THREE.GLTFLoader();
+            loader.load('https://example.com/path/to/zombie.glb', (gltf) => {
+                for (let i = 0; i < numZombies; i++) {
+                    const zombie = gltf.scene.clone();
+                    zombie.position.set(Math.random() * 1000 - 500, 0, Math.random() * 1000 - 500);
+                    zombies.push(zombie);
+                    scene.add(zombie);
+                }
+            });
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = true;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = true;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = true;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = true;
+                    break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = false;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = false;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = false;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = false;
+                    break;
+            }
         }
 
         function animate() {
             requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.z -= velocity.z * 10.0 * delta;
+
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+
+            if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
+            if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
+
+            camera.translateX(velocity.x * delta);
+            camera.translateZ(velocity.z * delta);
+
+            bullets.forEach((bullet, index) => {
+                bullet.translateZ(-0.5);
+                if (bullet.position.distanceTo(camera.position) > 100) {
+                    scene.remove(bullet);
+                    bullets.splice(index, 1);
+                }
+            });
+
+            zombies.forEach((zombie) => {
+                tempVector.copy(camera.position);
+                tempVector.y = 0;
+                zombie.lookAt(tempVector);
+                zombie.translateZ(0.01);
+            });
+
             renderer.render(scene, camera);
         }
 
-        function onWindowResize() {
+        window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        }
+        });
 
-        function shoot() {
-            // Shooting logic here
-            console.log('Shoot!');
-        }
-
-        function spawnZombie() {
-            let zombieGeometry = new THREE.BoxGeometry(1, 2, 1);
-            let zombieMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-            let zombie = new THREE.Mesh(zombieGeometry, zombieMaterial);
-            zombie.position.set(
-                Math.random() * 10 - 5,
-                1,
-                Math.random() * 10 - 5
-            );
-            scene.add(zombie);
-            zombies.push(zombie);
-        }
+        init();
+        animate();
     </script>
 </body>
 </html>
